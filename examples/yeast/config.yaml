@@ -1,0 +1,54 @@
+# Two Saccharomyces species, 11 public RNA-seq runs from four BioProjects.
+# Everything is downloaded by the pipeline; nothing is stored in the repository.
+# Run: bash examples/yeast/run.sh
+
+qc:
+  output_dir: data/qc
+  runs:
+    accessions_file: runs.txt
+  fastp:
+    threads: 4
+
+references:
+  s_cerevisiae:
+    ncbi_accession: GCF_000146045.2
+    annotation_source: "NCBI RefSeq GCF_000146045.2 (S288C, R64)"
+    tax_id: 4932
+  s_paradoxus:
+    ncbi_accession: GCF_002079055.1
+    annotation_source: "NCBI RefSeq GCF_002079055.1 (CBS 432)"
+    tax_id: 27291
+
+ref:
+  output_dir: data/ref
+  promoter_bp: 800
+  salmon:
+    threads: 4
+  busco:
+    enabled: true
+    lineage: saccharomycetes_odb12
+    threads: 4
+
+quant:
+  output_dir: data/quant
+  salmon:
+    threads: 4
+    bootstraps: 30
+
+ortho:
+  output_dir: data/ortho
+  threads: 8
+  species_tree:
+    model: MFP
+    bootstrap: 1000
+
+matrix:
+  output_dir: data/matrix
+
+normalize:
+  output_dir: data/normalized
+
+final:
+  output_dir: data/final
+  split:
+    seed: 1

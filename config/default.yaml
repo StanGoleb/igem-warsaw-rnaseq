@@ -1,0 +1,117 @@
+# Paths are resolved relative to this file.  Sections are independent: a config
+# may contain only the stages you run.
+
+# ---------------------------------------------------------------- stage 1: qc
+qc:
+  output_dir: data/qc
+
+  # Public runs: a file with one ENA/SRA run accession per line, or an NCBI
+  # taxon id (all TRANSCRIPTOMIC runs under it).  Local runs: a TSV with
+  # run_id, fastq_1, fastq_2, reference, batch, sample.  Both may be combined.
+  runs:
+    accessions_file: null
+    taxon_id: null
+    local_file: null
+
+  # Metadata gates (evaluated before any download).
+  allowed_library_strategies: [RNA-Seq]
+  excluded_platforms: [ABI_SOLID]   # colorspace reads: salmon cannot map them
+
+  fastp:
+    threads: 4
+    extra_args: []
+
+  # rRNA screening with SortMeRNA. Fills pct_rrna; never affects the decision.
+  rrna:
+    enabled: false
+    references: []   # SortMeRNA reference FASTA file(s)
+    threads: 4
+
+  # Optional quality gates, off by default (null). Suggested values and their
+  # sources are documented in README.md; both metrics are always reported.
+  gates:
+    min_pct_q30: null       # suggested 80  (Illumina run specification)
+    max_pct_adapter: null   # suggested 10  (FastQC "failure" threshold)
+
+# --------------------------------------------------------------- stage 2: ref
+# One entry per reference genome.  Either an NCBI assembly accession (downloaded
+# automatically) or local genome + annotation files (plain or gzipped).
+references:
+  my_species:
+    ncbi_accession: GCF_XXXXXXXXX.1
+    annotation_source: "NCBI RefSeq GCF_XXXXXXXXX.1"
+    tax_id: 12345   # NCBI taxon; runs whose ENA lineage contains it are routed here
+    anchor_genes: []  # reference genes for anchor normalisation; empty = geNorm picks
+  # my_other_species:
+  #   genome: refs/other/genome.fna.gz
+  #   annotation: refs/other/annotation.gff3.gz
+  #   annotation_source: "JGI MycoCosm portal XYZ"
+
+ref:
+  output_dir: data/ref
+  promoter_bp: 800  # bases 5' of the start codon; used by stages 4 and 7
+  salmon:
+    kmer: 31        # salmon default; suited to reads >= ~75 bp
+    decoy: true     # genome as decoy (salmon's recommended setup)
+    threads: 8
+  busco:
+    enabled: false
+    lineage: null   # required when enabled, e.g. fungi_odb12
+    threads: 8
+
+# ------------------------------------------------------------- stage 3: quant
+quant:
+  output_dir: data/quant
+  routing_overrides: null   # optional TSV with columns run_id, reference
+  salmon:
+    threads: 4
+    bootstraps: 30          # 0 disables; boot_cv then stays NA
+  detected_min_reads: 10    # "gene detected" = counts >= this (edgeR filterByExpr min.count)
+  gates:
+    min_pct_mapped: 5.0     # nf-core/rnaseq --min_mapped_reads default; null disables
+  crossmap_flag:            # flag = median_tpm >= a AND median_boot_cv >= b;
+    min_median_tpm: null    # NA until both are set (no published default)
+    min_median_boot_cv: null
+
+# ------------------------------------------------------------- stage 4: ortho
+ortho:
+  output_dir: data/ortho
+  threads: 8
+  gene_tree_method: dendroblast   # OrthoFinder -M: dendroblast (fast) or msa
+  species_tree:
+    model: MFP                    # IQ-TREE ModelFinder
+    bootstrap: 1000               # ultrafast bootstrap replicates; 0 disables
+  conservation:
+    seed: 1                       # shuffled-promoter background
+
+# ------------------------------------------------------------ stage 5: matrix
+matrix:
+  output_dir: data/matrix
+
+# -------------------------------------------------------- stage 6: normalize
+normalize:
+  output_dir: data/normalized
+  conditions_file: null       # optional TSV: sample_id, condition, description, ...
+  anchors:                    # used when a reference lists no anchor_genes
+    n_auto: 3                 # most stable genes by geNorm M (Vandesompele 2002)
+    min_mean_log2tpm: 4.0     # candidate floor
+    candidate_top_n: 500
+  classes:
+    window: 0.10              # rank window whose coverage is cons_frac
+    min_cons_frac: 0.95       # "always in range"
+    silent_min_median_pct: 0.75
+    inducible_min_amplitude: 0.30
+    top_pct: 0.10
+  combat:
+    enabled: true
+    min_batch_size: 2         # samples in smaller bioprojects are left NA
+
+# ------------------------------------------------------------- stage 7: final
+final:
+  output_dir: data/final
+  flank_bp: 1000              # flanks on both sides of promoter + gene body
+  split:                      # train/val/test by orthogroup
+    train: 0.8
+    val: 0.1
+    test: 0.1
+    seed: 1

@@ -1,0 +1,30 @@
+name: igem-warsaw-rnaseq
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pandas>=2.0
+  - numpy>=1.24
+  - matplotlib-base>=3.8
+  - pyyaml>=6.0
+  - fastp>=0.23
+  - sortmerna=4.3.6   # 4.3.7 bioconda build requires AVX-512
+  - salmon=1.12.*
+  - gffread>=0.12
+  - busco>=6.1
+  - orthofinder>=3.0
+  - mafft>=7.5
+  - trimal>=1.4
+  - iqtree>=3.0
+  - curl
+  - pytest
+  - ruff
+  - pip
+  - pip:
+      # PyPI multiqc avoids conda's kaleido->mathjax dependency (tens of
+      # thousands of font files, which exhausts per-user file quotas).
+      - multiqc>=1.20
+      - inmoose>=0.9      # ComBat (pycombat_norm)
+      - pandera>=0.20     # final-dataset schema validation
+      - -e .
