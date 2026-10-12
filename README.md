@@ -181,6 +181,7 @@ igem-warsaw-rnaseq ortho tree       --config my.yaml
 igem-warsaw-rnaseq ortho conservation --config my.yaml
 igem-warsaw-rnaseq matrix build     --config my.yaml
 igem-warsaw-rnaseq normalize run    --config my.yaml
+igem-warsaw-rnaseq normalize plots  --config my.yaml
 igem-warsaw-rnaseq final build      --config my.yaml
 ```
 
@@ -299,6 +300,16 @@ window of width 0.10 in at least 95% of samples and the gene is expressed),
 `silent` (stable but unexpressed), `inducible` (reaches the top decile with a
 swing of at least 0.30 from its median rank), `variable` (the rest);
 `is_strong` marks constitutive genes in the top decile.
+
+`normalize plots` draws a gene map per reference and for orthogroups
+(`normalized/plots/map_<space>.png`): each point is a gene placed by its
+strength in its weakest sample against its strongest, coloured by class; when
+promoter conservation has been computed, a second map restricts to genes whose
+promoters are more similar than the shuffled baseline. `normalize plot-gene
+--gene ID` draws one gene: the map with the gene highlighted and histograms of
+its rank strength across the samples of its reference and, if it belongs to an
+orthogroup, across all samples; the title carries the gene description from the
+annotation.
 
 ## Interpretation
 

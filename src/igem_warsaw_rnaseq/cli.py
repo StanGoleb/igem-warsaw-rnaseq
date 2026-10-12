@@ -27,6 +27,7 @@ from igem_warsaw_rnaseq.final import build as final_build
 from igem_warsaw_rnaseq.final.paths import FinalPaths
 from igem_warsaw_rnaseq.matrix import build as matrix_build
 from igem_warsaw_rnaseq.matrix.paths import MatrixPaths
+from igem_warsaw_rnaseq.normalize import plots as normalize_plots
 from igem_warsaw_rnaseq.normalize import run as normalize_run
 from igem_warsaw_rnaseq.normalize.paths import NormalizePaths
 from igem_warsaw_rnaseq.ortho import conservation as ortho_conservation
@@ -181,6 +182,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_config(p)
     p.set_defaults(func=cmd_normalize_run)
+
+    p = commands.add_parser("plots", help="gene maps per reference and for orthogroups")
+    _add_config(p)
+    p.set_defaults(func=cmd_normalize_plots)
+
+    p = commands.add_parser("plot-gene", help="map and rank histograms of one gene")
+    _add_config(p)
+    p.add_argument("--gene", required=True, metavar="GENE_ID")
+    p.add_argument(
+        "--reference", metavar="NAME", help="needed when the id occurs in several"
+    )
+    p.set_defaults(func=cmd_normalize_plot_gene)
 
     conditions = stages.add_parser("conditions", help="condition layer helpers")
     commands = conditions.add_subparsers(dest="command", required=True)
@@ -575,6 +588,136 @@ def cmd_normalize_run(cfg: Config, args: argparse.Namespace) -> int:
         paths, MatrixPaths(matrix.output_dir), cfg.references, normalize
     )
     print(f"{len(samples)} samples -> {paths.root}")
+    return 0
+
+
+def _conserved_genes(cfg: Config) -> set[tuple[str, str]] | None:
+    """(reference, gene) pairs whose orthogroup promoter identity is above background."""
+    if cfg.ortho is None:
+        return None
+    ortho = OrthoPaths(cfg.ortho.output_dir)
+    if not ortho.promoter_conservation.exists():
+        return None
+    cons = pd.read_csv(ortho.promoter_conservation, sep="\t")
+    above = set(cons.loc[cons["prom_above_background"] == True, "orthogroup"])
+    gene_og = final_build.gene_orthogroups(load_orthogroups(ortho.orthogroups))
+    return {key for key, og in gene_og.items() if og in above}
+
+
+def cmd_normalize_plots(cfg: Config, args: argparse.Namespace) -> int:
+    paths = NormalizePaths(_normalize(cfg).output_dir)
+    paths.plots_dir.mkdir(parents=True, exist_ok=True)
+    conserved = _conserved_genes(cfg)
+    summary = pd.read_parquet(paths.gene_summary)
+    samples = pd.read_parquet(paths.expr, columns=["reference", "sample_id"])
+    for ref, table in summary.groupby("reference"):
+        table = table.set_index("gene_id")
+        n = samples.loc[samples["reference"] == ref, "sample_id"].nunique()
+        normalize_plots.gene_map(
+            table, paths.gene_map(str(ref)), f"{ref}: gene map", "gene", n
+        )
+        if conserved is not None:
+            keep = [g for g in table.index if (str(ref), g) in conserved]
+            normalize_plots.gene_map(
+                table.loc[keep],
+                paths.gene_map(str(ref), conserved=True),
+                f"{ref}: genes with conserved promoters",
+                "gene",
+                n,
+            )
+    og = pd.read_parquet(paths.orthogroup_summary).set_index("orthogroup")
+    n_all = pd.read_parquet(paths.expr_orthogroup, columns=["sample_id"])[
+        "sample_id"
+    ].nunique()
+    normalize_plots.gene_map(
+        og, paths.gene_map("orthogroup"), "orthogroups: gene map", "orthogroup", n_all
+    )
+    if conserved is not None:
+        cons = pd.read_csv(
+            OrthoPaths(cfg.ortho.output_dir).promoter_conservation, sep="\t"
+        )
+        keep = og.index.intersection(
+            cons.loc[cons["prom_above_background"] == True, "orthogroup"]
+        )
+        normalize_plots.gene_map(
+            og.loc[keep],
+            paths.gene_map("orthogroup", conserved=True),
+            "orthogroups with conserved promoters",
+            "orthogroup",
+            n_all,
+        )
+    print(f"plots -> {paths.plots_dir}")
+    return 0
+
+
+def cmd_normalize_plot_gene(cfg: Config, args: argparse.Namespace) -> int:
+    tools.require("ref promoters")
+    normalize, ref_cfg = _normalize(cfg), _ref(cfg)
+    paths = NormalizePaths(normalize.output_dir)
+    summary = pd.read_parquet(paths.gene_summary)
+    hits = summary[summary["gene_id"] == args.gene]
+    if args.reference:
+        hits = hits[hits["reference"] == args.reference]
+    if hits.empty:
+        raise ConfigError(f"{args.gene}: not in gene_summary.parquet")
+    if len(hits) > 1:
+        raise ConfigError(
+            f"{args.gene}: present in {sorted(hits['reference'])}; pass --reference"
+        )
+    row = hits.iloc[0]
+    reference = str(row["reference"])
+    ref_summary = summary[summary["reference"] == reference].set_index("gene_id")
+    expr = pd.read_parquet(paths.expr, columns=["gene_id", "reference", "rank_pct"])
+    strength = (
+        1.0
+        - expr.loc[
+            (expr["gene_id"] == args.gene) & (expr["reference"] == reference),
+            "rank_pct",
+        ]
+    )
+
+    ref_paths = RefPaths(ref_cfg.output_dir, reference)
+    t2g = pd.read_csv(ref_paths.t2g, sep="\t", dtype=str)
+    _, gff = source_files(cfg.references[reference], ref_paths)
+    with tempfile.TemporaryDirectory() as tmp:
+        descriptions = normalize_plots.gene_descriptions(
+            plain_gff(gff, Path(tmp) / "annotation.gff"),
+            dict(zip(t2g["transcript"], t2g["gene"], strict=True)),
+        )
+
+    orthogroup = og_row = og_strength = None
+    if cfg.ortho is not None and OrthoPaths(cfg.ortho.output_dir).orthogroups.exists():
+        gene_og = final_build.gene_orthogroups(
+            load_orthogroups(OrthoPaths(cfg.ortho.output_dir).orthogroups)
+        )
+        orthogroup = gene_og.get((reference, args.gene))
+        if orthogroup is not None:
+            og_summary = pd.read_parquet(paths.orthogroup_summary).set_index(
+                "orthogroup"
+            )
+            og_expr = pd.read_parquet(
+                paths.expr_orthogroup, columns=["orthogroup", "rank_pct"]
+            )
+            og_row = og_summary.loc[orthogroup]
+            og_strength = (
+                1.0 - og_expr.loc[og_expr["orthogroup"] == orthogroup, "rank_pct"]
+            )
+
+    paths.plots_dir.mkdir(parents=True, exist_ok=True)
+    out = paths.gene_plot(args.gene)
+    normalize_plots.gene_figure(
+        args.gene,
+        reference,
+        descriptions.get(args.gene, ""),
+        row,
+        strength,
+        ref_summary,
+        orthogroup,
+        og_row,
+        og_strength,
+        out,
+    )
+    print(f"{args.gene} ({row['class']}) -> {out}")
     return 0
 
 

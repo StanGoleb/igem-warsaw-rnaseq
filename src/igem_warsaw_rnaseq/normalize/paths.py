@@ -33,3 +33,14 @@ class NormalizePaths:
     @property
     def combat_log(self) -> Path:
         return self.root / "combat_log.json"
+
+    @property
+    def plots_dir(self) -> Path:
+        return self.root / "plots"
+
+    def gene_map(self, space: str, conserved: bool = False) -> Path:
+        suffix = "_conserved" if conserved else ""
+        return self.plots_dir / f"map_{space}{suffix}.png"
+
+    def gene_plot(self, gene: str) -> Path:
+        return self.plots_dir / f"gene_{gene}.png"
