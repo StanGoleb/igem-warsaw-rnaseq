@@ -99,7 +99,11 @@ flowchart LR
     M --> N["stage 6: normalize<br/>rank, anchor, ComBat,<br/>gene classes"]
     N --> F["stage 7: final<br/>matrices, metadata,<br/>sequences, splits"]
     O --> F
-    C[conditions.tsv<br/>curated] --> N
+    R --> F
+    S --> F
+    Q --> C["conditions export,<br/>curation<br/>conditions.tsv"]
+    C --> N
+    C --> F
 ```
 
 1. **Read QC** (`qc`). Run metadata is fetched from ENA (or read from a table of
