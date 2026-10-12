@@ -96,7 +96,7 @@ flowchart LR
     R --> O["stage 4: ortho<br/>OrthoFinder, species tree,<br/>promoter conservation"]
     S --> M["stage 5: matrix<br/>genes x samples,<br/>orthogroups x samples"]
     O --> M
-    M --> N["stage 6: normalize<br/>rank, anchor, ComBat,<br/>gene classes"]
+    M --> N["stage 6: normalize<br/>rank, anchor, ComBat,<br/>gene classes, gene maps"]
     N --> F["stage 7: final<br/>matrices, metadata,<br/>sequences, splits"]
     O --> F
     R --> F
@@ -126,7 +126,8 @@ flowchart LR
    genes x samples matrices per reference and an orthogroups x samples matrix
    with one representative gene per orthogroup and reference.
 6. **Normalisation** (`normalize`). Rank percentiles, anchor normalisation,
-   ComBat and gene classes, in gene space and orthogroup space.
+   ComBat and gene classes, in gene space and orthogroup space; gene maps of
+   the classification and per-gene figures on request.
 7. **Final dataset** (`final`). Wide matrices, sample and gene metadata,
    sequences, orthogroup-aware train/validation/test splits and a schema
    validation report.
@@ -255,12 +256,14 @@ and so on). The files consumed by later stages and the delivered dataset are:
 | `qc/fastq_trimmed/` | trimmed reads |
 | `ref/<reference>/` | `transcripts.fa`, `proteins.fa` (one per gene, named by gene), `t2g.tsv`, `promoters_<bp>bp.fa`, `salmon_index/`, `ref_qc.json` |
 | `quant/quant_qc.tsv` | one row per run: reference, mapping rate, decoy fraction, library type, detected genes, PCA coordinates, median Spearman correlation to other runs, decision |
+| `quant/qc_plots/` | PCA coloured by BioProject and sample correlation heatmap, per reference |
 | `quant/quant_gene/<run>.tsv` | per gene: counts, TPM, bootstrap CV |
 | `ortho/orthofinder/` | OrthoFinder tables, gene trees (`gene_trees.tsv`) |
 | `ortho/species_tree.nwk`, `ortho/patristic_distances.tsv` | species tree and leaf-to-leaf distances |
 | `ortho/promoter_conservation.tsv` | per single-copy orthogroup: protein identity, promoter identity, shuffled-promoter identity |
 | `matrix/` | parquet matrices per reference and in orthogroup space, `samples.tsv`, `orthogroup_representative.tsv` |
 | `normalized/` | long tables of all normalised layers, `gene_summary.parquet`, `anchors.tsv`, `combat_log.json` |
+| `normalized/plots/` | gene maps per reference and for orthogroups (`map_*.png`), per-gene figures (`gene_<ID>.png`) |
 | `final/` | the delivered dataset, below |
 
 The final dataset:
